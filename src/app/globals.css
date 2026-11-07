@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #f7fbee;
+  --surface: #ffffff;
+  --surface-2: #eef5df;
+  --line: #dfe9c8;
+  --line-2: #c3d4a0;
+  --ink: #171717;
+  --muted: #4e6170;
+  --brand: #97c334;
+  --on-brand: #171717;
+  --brand-soft: #eaf4cf;
+  --brand-ink: #3f5c06;
+  --brand-dark: #668c1f;
+  --tangerine-soft: #fff8c2;
+  --rose-soft: #ffe3e7;
+  --rose-ink: #8a1c2c;
+  --aqua-soft: #d8f5f2;
+  --sky-soft: #ddf1ff;
+  --ok: #06604a;
+  --warn: #7a3b00;
+  --info: #0b4f7a;
+  --danger: #b42318;
+  --danger-soft: #fee4e2;
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #171717;
+  --surface: #1f1f1f;
+  --surface-2: #2a2a2a;
+  --line: #333333;
+  --line-2: #4d4d4d;
+  --ink: #ffffff;
+  --muted: #ababab;
+  --brand: #97c334;
+  --on-brand: #171717;
+  --brand-soft: #2c3a14;
+  --brand-ink: #c5e47d;
+  --brand-dark: #7fa62a;
+  --tangerine-soft: #3a350a;
+  --rose-soft: #3d1a22;
+  --rose-ink: #ffc2cb;
+  --aqua-soft: #103a36;
+  --sky-soft: #10304a;
+  --ok: #7ef0c8;
+  --warn: #ffc9b8;
+  --info: #9ed8ff;
+  --danger: #ff9a90;
+  --danger-soft: #3d1a18;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+  }
+  :focus-visible {
+    outline: 3px solid #F5D900;
+    outline-offset: 2px;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted);
+    opacity: 0.8;
+  }
+}
+
+/* Cross-fade used by smoothTransition() when switching theme or language. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 350ms;
+  animation-timing-function: ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

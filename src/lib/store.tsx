@@ -295,7 +295,8 @@ function reduce(s: State, a: Action): State {
             activity: [done, ...card.activity],
           },
         },
-        feed: [{ customerId: a.customerId, type: 'reward', action: { bn: `Reward · ${given.bn}`, en: `Reward · ${given.en}` }, staff: a.by, time: clock(a.at) }, ...s.feed],
+        // The feed names what was handed over (the chosen item), not the whole voucher title, so the label stays short.
+        feed: [{ customerId: a.customerId, type: 'reward', action: { bn: `Reward · ${(a.item ?? v.title).bn}`, en: `Reward · ${(a.item ?? v.title).en}` }, staff: a.by, time: clock(a.at) }, ...s.feed],
         live: { ...s.live, rewards: s.live.rewards + 1 },
       };
     }

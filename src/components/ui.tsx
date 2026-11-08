@@ -55,8 +55,13 @@ const tones = {
 };
 export type Tone = keyof typeof tones;
 
-export function Badge({ tone = 'brand', className, children }: { tone?: Tone; className?: string; children: ReactNode }) {
-  return <span className={cn('inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[13px] font-extrabold', tones[tone], className)}>{children}</span>;
+/** A short pill. Pass `wrap` for text that can be long, so it breaks onto a second line instead of pushing its row wider. */
+export function Badge({ tone = 'brand', className, wrap, children }: { tone?: Tone; className?: string; wrap?: boolean; children: ReactNode }) {
+  return (
+    <span className={cn('inline-flex items-center px-2.5 py-0.5 text-[13px] font-extrabold', wrap ? 'max-w-full rounded-2xl' : 'whitespace-nowrap rounded-full', tones[tone], className)}>
+      {children}
+    </span>
+  );
 }
 
 export function IconChip({ color, children, size = 40, className }: { color: string; children: ReactNode; size?: number; className?: string }) {

@@ -38,17 +38,20 @@ export default function CashierToday() {
           {store.feed.slice(0, 10).map((item, i) => {
             const customer = store.customer(item.customerId);
             return (
-              <li key={i} className="flex min-h-[60px] items-center gap-3 border-t border-line">
+              <li key={i} className="flex min-h-[60px] items-start gap-3 border-t border-line py-2.5">
                 <IconChip color={customer?.avatar ?? '#B8D4CF'} size={38} className="rounded-[13px]">{customer ? l(customer.initial) : '?'}</IconChip>
-                <span className="min-w-0 flex-1">
-                  {customer ? (
-                    <Link href={`/cashier/customers/${customer.id}`} className="block truncate font-bold text-ink">{l(customer.name)}</Link>
-                  ) : (
-                    <span className="block font-bold">{tx('গ্রাহক', 'Customer')}</span>
-                  )}
-                  <span className="block text-[13px] text-muted">{l(item.staff)} · {l(item.time)}</span>
-                </span>
-                <Badge tone={TONE[item.type]}>{l(item.action)}</Badge>
+                {/* The label sits beside the name when it fits and drops under it when it does not, so a long label never squeezes the name. */}
+                <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                  <span className="min-w-0 flex-[1_1_6.5rem]">
+                    {customer ? (
+                      <Link href={`/cashier/customers/${customer.id}`} className="block truncate font-bold text-ink">{l(customer.name)}</Link>
+                    ) : (
+                      <span className="block font-bold">{tx('গ্রাহক', 'Customer')}</span>
+                    )}
+                    <span className="block text-[13px] text-muted">{l(item.staff)} · {l(item.time)}</span>
+                  </span>
+                  <Badge tone={TONE[item.type]} wrap>{l(item.action)}</Badge>
+                </div>
               </li>
             );
           })}

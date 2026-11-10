@@ -1,15 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Clock, Copy, LocateFixed, MapPin, Navigation, Search, Star } from 'lucide-react';
+import { Check, Clock, Copy, LocateFixed, MapPin, Navigation, Search } from 'lucide-react';
 import { Badge, Button, ButtonLink, Notice, PageTitle, inputClass } from '@/components/ui';
-import { branches, type Branch } from '@/lib/data';
+import { useBranches } from '@/lib/api/branches';
+import type { Branch } from '@/lib/data';
+import { dhakaMinuteOfDay } from '@/lib/domain/time';
 import { hour12 as hour } from '@/lib/hours';
 import { useI18n } from '@/lib/i18n';
-import { useStore } from '@/lib/store';
-
-/** The outlet this customer visits most. Sample value, derive it from their history later. */
-const USUAL = 'mirpur-10';
 
 type Geo = 'idle' | 'loading' | 'ok' | 'denied' | 'unsupported';
 type Point = { lat: number; lng: number };
@@ -28,9 +26,11 @@ export default function OutletsPage() {
   const [pos, setPos] = useState<Point | null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const [copied, setCopied] = useState('');
-  const { hours } = useStore();
+  const { branches, loading } = useBranches();
+  const hours = Object.fromEntries(branches.map((b) => [b.id, b.hours]));
 
-  // Open or closed depends on the visitor's clock, so it is only worked out after mount to keep the server HTML stable.
+  // Open or closed is worked out after mount, from the current time in Dhaka (the same clock the server uses, BR-26),
+  // so the server HTML stays stable and the answer does not depend on the visitor's own time zone.
   useEffect(() => {
     const tick = () => setNow(new Date());
     tick();
@@ -38,8 +38,8 @@ export default function OutletsPage() {
     return () => clearInterval(id);
   }, []);
 
-  const minutes = now ? now.getHours() * 60 + now.getMinutes() : null;
-  const isOpen = (id: string) => (minutes === null ? null : minutes >= hours[id].open && minutes < hours[id].close);
+  const minutes = now ? dhakaMinuteOfDay(now) : null;
+  const isOpen = (id: string) => (minutes === null || !hours[id] ? null : minutes >= hours[id].open && minutes < hours[id].close);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -47,7 +47,7 @@ export default function OutletsPage() {
       .map((b) => ({ b, km: pos ? distance(pos, b) : null }))
       .filter(({ b }) => !q || [b.name.bn, b.name.en, b.address.bn, b.address.en].some((v) => v.toLowerCase().includes(q)))
       .sort((x, y) => (x.km !== null && y.km !== null ? x.km - y.km : 0));
-  }, [query, pos]);
+  }, [branches, query, pos]);
 
   const locate = () => {
     if (!('geolocation' in navigator)) return setGeo('unsupported');
@@ -95,7 +95,11 @@ export default function OutletsPage() {
       {geo === 'denied' && <Notice tone="warn">{tx('অবস্থানের অনুমতি পাওয়া যায়নি। তবুও সব আউটলেট দেখতে পারবেন।', 'Location permission wasn’t granted. You can still browse every outlet.')}</Notice>}
       {geo === 'unsupported' && <Notice tone="warn">{tx('এই ডিভাইসে অবস্থান পাওয়া যায়নি।', 'Location isn’t available on this device.')}</Notice>}
 
-      {rows.length === 0 ? (
+      {loading ? (
+        <div role="status" aria-label={tx('লোড হচ্ছে', 'Loading')} className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+          {[0, 1, 2].map((i) => <div key={i} className="h-40 animate-pulse rounded-card bg-surface2" />)}
+        </div>
+      ) : rows.length === 0 ? (
         <p className="rounded-card border border-dashed border-line2 p-8 text-center text-muted">{tx('কোনো আউটলেট পাওয়া যায়নি। অন্য নাম বা ঠিকানা দিয়ে খুঁজুন।', 'No outlets match that. Try another name or address.')}</p>
       ) : (
         <ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
@@ -118,7 +122,6 @@ export default function OutletsPage() {
                   ) : (
                     <Badge tone="danger">{tx(`বন্ধ · ${n(hour(hours[b.id].open))}-এ খুলবে`, `Closed · opens ${hour(hours[b.id].open)}`)}</Badge>
                   )}
-                  {b.id === USUAL && <Badge tone="warn"><Star size={13} className="mr-1" aria-hidden="true" />{tx('আপনার নিয়মিত', 'Your usual')}</Badge>}
                 </div>
                 <div className="mt-auto flex flex-wrap gap-2 pt-1">
                   <ButtonLink href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(`ChaJoy ${b.name.en}, ${b.address.en}, Dhaka`)}`} target="_blank" rel="noreferrer" size="sm">

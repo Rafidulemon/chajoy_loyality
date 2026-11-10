@@ -5,31 +5,32 @@ import { ChevronRight, Gift, Tag } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { LoyaltyCard } from '@/components/loyalty-card';
 import { Card, CardTitle, IconChip } from '@/components/ui';
-import { history } from '@/lib/data';
+import { useHistory } from '@/lib/api/history';
+import { useProgram } from '@/lib/api/program';
 import { useI18n } from '@/lib/i18n';
-import { useProgram } from '@/lib/store';
-import { useCardView, useWallet } from '@/lib/wallet';
-
-const CUSTOMER_ID = 'A7K-2931';
+import { useCardView, useMemberQr, useWallet } from '@/lib/wallet';
 
 export default function CardsPage() {
   const { tx, l, n } = useI18n();
-  const { readyVouchers, unclaimed, activity } = useWallet();
+  const { me, memberCode, readyVouchers, unclaimed } = useWallet();
   const { collected, fresh } = useCardView();
   const shop = useProgram();
-  const recent = [...activity, ...history].slice(0, 3);
-  const soonest = Math.min(...readyVouchers.map((v) => v.daysLeft));
+  const qr = useMemberQr();
+  const { items, loading } = useHistory(5);
+  const recent = items.slice(0, 3);
+  const soonest = readyVouchers.length ? Math.min(...readyVouchers.map((v) => v.daysLeft)) : Infinity;
+  const first = (me?.name ?? '').trim().split(' ')[0];
 
   return (
     <>
       <div>
-        <h1 className="font-display text-[clamp(26px,4vw,36px)] font-bold leading-tight">{tx('হ্যালো, তানভীর', 'Hi, Tanvir')}</h1>
+        <h1 className="font-display text-[clamp(26px,4vw,36px)] font-bold leading-tight">{first ? tx(`হ্যালো, ${first}`, `Hi, ${first}`) : tx('হ্যালো!', 'Hello!')}</h1>
         <p className="text-[15px] text-muted">{tx('আপনার চা জয় লয়্যালটি কার্ড', 'Your ChaJoy loyalty card')}</p>
       </div>
 
       <div className="flex flex-wrap items-stretch gap-[18px]">
         <div className="min-w-0 flex-[3_1_340px]">
-          <LoyaltyCard shop={shop} collected={collected} fresh={fresh} memberName={tx('তানভীর আহমেদ', 'Tanvir Ahmed')} memberId={CUSTOMER_ID}>
+          <LoyaltyCard shop={shop} collected={collected} fresh={fresh} memberName={me?.name ?? undefined} memberId={memberCode} qrValue={qr}>
             <Link href="/cards/details" className="inline-flex min-h-11 items-center gap-1.5 rounded-full border-[1.5px] border-line2 bg-surface px-4 text-[15px] font-bold">
               {tx('কার্ডের বিস্তারিত', 'Card details')}
               <ChevronRight size={18} aria-hidden="true" />
@@ -42,11 +43,16 @@ export default function CardsPage() {
             <p className="mt-1 text-sm text-muted">{tx('ক্যাশিয়ার স্ক্যান করলেই Stamp যোগ হবে', 'The cashier scans it and your stamp is added')}</p>
           </div>
           <div className="rounded-[20px] border-4 border-tangerine bg-white p-3">
-            <QRCodeSVG value={`chajoy:customer:${CUSTOMER_ID}`} size={164} fgColor="#171717" bgColor="#FFFFFF" level="M" title={tx('আমার QR কোড', 'My QR code')} />
+            {qr ? (
+              <QRCodeSVG value={qr} size={164} fgColor="#171717" bgColor="#FFFFFF" level="M" title={tx('আমার QR কোড', 'My QR code')} />
+            ) : (
+              <div role="status" aria-label={tx('QR কোড তৈরি হচ্ছে', 'Preparing your QR code')} className="size-[164px] animate-pulse rounded-xl bg-surface2" />
+            )}
           </div>
           <p className="text-sm text-muted">
-            {tx('গ্রাহক ID', 'Customer ID')}: <span className="font-mono font-bold tracking-wider text-ink">{CUSTOMER_ID}</span>
+            {tx('গ্রাহক ID', 'Customer ID')}: <span className="font-mono font-bold tracking-wider text-ink">{memberCode}</span>
           </p>
+          <p className="max-w-[260px] text-[12.5px] text-muted">{tx('নিরাপত্তার জন্য এই QR প্রতি মিনিটে নতুন হয়। স্ক্রিনশট কাজ করবে না।', 'For your safety this QR renews every minute, so a screenshot will not work.')}</p>
         </Card>
       </div>
 
@@ -74,20 +80,28 @@ export default function CardsPage() {
 
       <Card>
         <CardTitle action={<Link href="/history" className="text-sm font-bold">{tx('সব দেখুন', 'See all')}</Link>}>{tx('সাম্প্রতিক', 'Recent activity')}</CardTitle>
-        <ul>
-          {recent.map((h, i) => {
-            const chip = h.type === 'stamp' ? '#F5D900' : h.type === 'reward' ? '#FF8A9A' : '#8FE3D8';
-            return (
-              <li key={i} className="flex items-center gap-3 py-2">
-                <IconChip color={chip}>{h.type === 'stamp' ? '+' : h.type === 'reward' ? '★' : '✓'}</IconChip>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-semibold">{l(h.detail)}</span>
-                  <span className="block text-[13px] text-muted">{l(h.group)}, {l(h.time)}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {loading ? (
+          <div role="status" aria-label={tx('লোড হচ্ছে', 'Loading')} className="flex flex-col gap-3 py-2">
+            {[0, 1, 2].map((i) => <div key={i} className="h-11 animate-pulse rounded-xl bg-surface2" />)}
+          </div>
+        ) : recent.length === 0 ? (
+          <p className="py-2 text-sm text-muted">{tx('এখনো কিছু নেই। প্রথম Stamp নিতে যেকোনো আউটলেটে QR দেখান।', 'Nothing yet. Show your QR at any ChaJoy outlet to get your first stamp.')}</p>
+        ) : (
+          <ul>
+            {recent.map((h, i) => {
+              const chip = h.type === 'stamp' ? '#F5D900' : h.type === 'reward' ? '#FF8A9A' : '#8FE3D8';
+              return (
+                <li key={i} className="flex items-center gap-3 py-2">
+                  <IconChip color={chip}>{h.type === 'stamp' ? ((h.count ?? 1) < 0 ? '−' : '+') : h.type === 'reward' ? '★' : '✓'}</IconChip>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] font-semibold">{l(h.detail)}</span>
+                    <span className="block text-[13px] text-muted">{l(h.group)}, {l(h.time)}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </Card>
     </>
   );

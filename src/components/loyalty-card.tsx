@@ -93,6 +93,7 @@ export function LoyaltyCard({
   fresh = 0,
   memberName,
   memberId,
+  qrValue,
   children,
   as: Tag = 'section',
 }: {
@@ -102,6 +103,8 @@ export function LoyaltyCard({
   fresh?: number;
   memberName?: string;
   memberId?: string;
+  /** What the QR on the back encodes: the signed member token from useMemberQr(). Falls back to the member id for previews. */
+  qrValue?: string | null;
   children?: ReactNode;
   as?: 'section' | 'div';
 }) {
@@ -212,7 +215,7 @@ export function LoyaltyCard({
           <span aria-hidden="true" className="relative mt-4 block h-9 bg-[#171717] shadow-[0_2px_0_rgba(255,255,255,0.25)] ring-1 ring-white/15 sm:mt-5" />
           <span className="relative flex flex-1 items-center gap-3.5 px-4 pb-3 pt-2.5 sm:px-5">
             <span className="rounded-2xl bg-white p-2 shadow-[0_3px_0_rgba(0,0,0,0.2)]">
-              <QRCodeSVG value={`chajoy:customer:${memberId ?? ''}`} size={92} fgColor="#171717" bgColor="#FFFFFF" level="M" title={tx('আমার QR কোড', 'My QR code')} />
+              <QRCodeSVG value={qrValue ?? `chajoy:customer:${memberId ?? ''}`} size={92} fgColor="#171717" bgColor="#FFFFFF" level="M" title={tx('আমার QR কোড', 'My QR code')} />
             </span>
             <span className="flex min-w-0 flex-1 flex-col gap-1.5">
               <span className="text-[15px] font-extrabold leading-snug">{tx('কাউন্টারে এই QR দেখান', 'Show this at the counter')}</span>

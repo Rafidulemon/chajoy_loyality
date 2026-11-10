@@ -1,7 +1,8 @@
 /**
  * The loyalty program management sets up: how many stamps earn a reward, what the reward can be, the earning rules
- * and the card colour. The shared store holds the live copy, and `buildShop` turns it into the card settings
- * the customer, cashier and owner screens draw from.
+ * and the card colour. The server holds the live copy (GET /api/program), and `buildShop` turns it into the card settings
+ * the customer, cashier and owner screens draw from. The reward items and card colours below are the one catalogue the
+ * program refers to by id: the screens draw from it and the server validates against the same list.
  */
 
 import type { Shop } from './data';

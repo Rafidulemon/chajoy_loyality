@@ -25,7 +25,7 @@ export default function RewardDetailPage() {
     </Link>
   );
 
-  // Vouchers live in memory, so one issued in this session is gone after a reload.
+  // The shell only shows this page once the wallet has loaded, so a voucher that is missing here really does not belong to this customer.
   if (!v)
     return (
       <>

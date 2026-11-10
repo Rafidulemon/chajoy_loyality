@@ -5,7 +5,7 @@ import { Check, Gift } from 'lucide-react';
 import { Button, ButtonLink } from '@/components/ui';
 import type { Voucher } from '@/lib/data';
 import { useI18n } from '@/lib/i18n';
-import { useProgram } from '@/lib/store';
+import { useProgram } from '@/lib/api/program';
 import { useWallet } from '@/lib/wallet';
 
 const CONFETTI = ['#97C334', '#F5D900', '#FF5D73', '#171717', '#668C1F'];

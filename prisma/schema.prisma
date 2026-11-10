@@ -1,0 +1,596 @@
+// ChaJoy loyalty: PostgreSQL schema (Neon in development).
+//
+// Conventions
+//  - Single vendor: there is no shop or tenant table. ChaJoy's outlets are `Branch` rows.
+//  - IDs are UUIDv7 (time ordered). Every timestamp is timestamptz, stored in UTC.
+//  - Money is whole taka (Int). Text shown to customers is kept as Bn / En column pairs.
+//  - `StampEntry` (the stamp ledger) and `AuditLog` are append-only: triggers in the `invariants`
+//    migration reject UPDATE and DELETE. Corrections are new entries that point at the old one.
+//  - Rules Prisma cannot express (CHECK constraints, partial indexes, the triggers, the default
+//    program row) live in prisma/migrations/*_invariants/migration.sql.
+//  - Business rules are numbered BR-xx and requirements CA-xx / MG-xx in the business documentation.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------------------------
+
+enum Language {
+  BN
+  EN
+}
+
+enum StaffRole {
+  CASHIER
+  MANAGER
+  OWNER
+}
+
+/// Where a customer joined: in the app, at the counter (CA-03) or from management (MG-05).
+enum JoinChannel {
+  APP
+  COUNTER
+  MANAGEMENT
+}
+
+/// Why stamps were added. Only PURCHASE counts against the daily limit (BR-03).
+enum StampSource {
+  PURCHASE
+  WELCOME
+  OFFER
+  ADJUSTMENT
+}
+
+enum VoucherSource {
+  CARD
+  OFFER
+}
+
+enum OfferKind {
+  DOUBLE
+  STAMP
+  VOUCHER
+  INFO
+  BIRTHDAY
+}
+
+enum OfferStatus {
+  LIVE
+  PAUSED
+}
+
+enum OtpPurpose {
+  CUSTOMER_LOGIN
+  STAFF_LOGIN
+}
+
+enum ActorType {
+  STAFF
+  CUSTOMER
+  SYSTEM
+}
+
+enum NotificationKind {
+  WELCOME
+  REWARD_UNLOCKED
+  REWARD_REDEEMED
+  OFFER_CLAIMED
+}
+
+enum SmsAudience {
+  ALL
+  LAPSED
+  REWARD_READY
+  BIRTHDAY_WEEK
+}
+
+enum SmsCampaignStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+enum SmsMessageStatus {
+  QUEUED
+  SENT
+  FAILED
+}
+
+// ---------------------------------------------------------------------------------------------
+// Outlets and program
+// ---------------------------------------------------------------------------------------------
+
+model Branch {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  /// Stable key used by seeds and URLs, for example "mirpur-10".
+  slug        String   @unique
+  nameBn      String
+  nameEn      String
+  addressBn   String
+  addressEn   String
+  /// Approximate coordinates, only used to sort outlets by distance. ChaJoy supplies the real ones (D-06).
+  latitude    Float
+  longitude   Float
+  /// Opening and closing time in minutes after midnight, Asia/Dhaka (BR-26).
+  openMinute  Int      @default(660)
+  closeMinute Int      @default(1380)
+  isMain      Boolean  @default(false)
+  /// Accent colour of the outlet's chip in the apps.
+  chipColor   String   @default("#97C334")
+  sortOrder   Int      @default(0)
+  /// False for a closed outlet. Its history stays.
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  staff        StaffBranch[]
+  stampEntries StampEntry[]
+  visits       Visit[]
+  redeemed     Voucher[]     @relation("VoucherRedeemedAt")
+  sessions     Session[]
+  joined       Customer[]    @relation("CustomerJoinedAt")
+
+  @@index([active, sortOrder])
+}
+
+/// The loyalty program management sets up. There is exactly one row (id = 1, enforced by a CHECK).
+/// A change applies to every customer and outlet at once (BR-12); `version` is bumped on every save so two
+/// people editing at the same time cannot overwrite each other. Every change is also written to AuditLog.
+model Program {
+  id             Int      @id @default(1)
+  /// Shown on the card under the brand name.
+  nameBn         String
+  nameEn         String
+  /// Stamps that earn a reward (BR-07).
+  stampsRequired Int
+  /// Ids from the reward catalogue in src/lib/program.ts. The customer picks one when redeeming (BR-09).
+  rewardItems    String[]
+  /// Minimum purchase in taka for a stamp (BR-01). Shown to cashiers; enforced once purchase amounts exist (MG-11).
+  minPurchase    Int
+  /// Most stamps a customer gets per day at the counter. 0 means no limit (BR-02).
+  dailyLimit     Int
+  /// Days before a stamp expires. 0 means never (BR-06).
+  expiryDays     Int
+  /// Whether a new customer starts with one free stamp (BR-17).
+  welcomeBonus   Boolean
+  /// Id from the card colour catalogue in src/lib/program.ts.
+  cardColor      String
+  version        Int      @default(1)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
+  updatedById    String?  @db.Uuid
+
+  updatedBy Staff? @relation("ProgramEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
+// ---------------------------------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------------------------------
+
+model Customer {
+  id                 String      @id @default(uuid(7)) @db.Uuid
+  /// Short number staff can read out. Not secret and not used for sign-in.
+  memberNo           Int         @unique @default(autoincrement())
+  /// E.164, for example +8801712345678. One number is one account (BR-16).
+  phone              String      @unique
+  /// Null until the customer finishes the profile step after the first sign-in.
+  name               String?
+  /// Optional (BR-18). Only the day and month matter for the birthday offer.
+  birthday           DateTime?   @db.Date
+  /// Offer SMS go only to customers who agreed (BR-22).
+  smsConsent         Boolean     @default(false)
+  language           Language    @default(EN)
+  joinedVia          JoinChannel
+  joinedAt           DateTime    @default(now()) @db.Timestamptz(3)
+  /// The staff member who added them at the counter or from management.
+  createdById        String?     @db.Uuid
+  /// The outlet they were added at, for customers who joined at the counter. Feeds "which outlets enrol best" (section 15).
+  joinedBranchId     String?     @db.Uuid
+  profileCompletedAt DateTime?   @db.Timestamptz(3)
+  /// Private note for management (MG-06).
+  internalNote       String?
+  /// Set when the customer asks for deletion (BR-25): name, phone and note are wiped, the ledger stays.
+  deletedAt          DateTime?   @db.Timestamptz(3)
+  createdAt          DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime    @updatedAt @db.Timestamptz(3)
+
+  createdBy     Staff?         @relation("CustomerAddedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  joinedBranch  Branch?        @relation("CustomerJoinedAt", fields: [joinedBranchId], references: [id], onDelete: SetNull)
+  card          Card?
+  stampEntries  StampEntry[]
+  vouchers      Voucher[]
+  claims        OfferClaim[]
+  visits        Visit[]
+  sessions      Session[]
+  notifications Notification[]
+  smsMessages   SmsMessage[]
+
+  @@index([name])
+  @@index([joinedAt(sort: Desc)])
+  @@index([joinedBranchId])
+}
+
+model Staff {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  /// E.164. Staff sign in with this number (CA-18).
+  phone             String    @unique
+  name              String
+  role              StaffRole
+  /// Switched off instead of deleted, so history keeps its author (MG-17).
+  active            Boolean   @default(true)
+  /// scrypt hash of the PIN, "scrypt$N$r$p$salt$hash" (see src/server/crypto.ts). Null until one is set.
+  pinHash           String?
+  pinChangedAt      DateTime? @db.Timestamptz(3)
+  failedPinAttempts Int       @default(0)
+  /// Sign-in and manager-override approvals are refused until then (after too many wrong PINs).
+  lockedUntil       DateTime? @db.Timestamptz(3)
+  lastLoginAt       DateTime? @db.Timestamptz(3)
+  lastSeenAt        DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+
+  /// Cashiers belong to exactly one outlet, managers to one or more. Owners have none: they see all outlets.
+  branches       StaffBranch[]
+  customersAdded Customer[]     @relation("CustomerAddedBy")
+  stampEntries   StampEntry[]   @relation("StampEntryActor")
+  overrides      StampEntry[]   @relation("StampEntryOverride")
+  redemptions    Voucher[]      @relation("VoucherRedeemer")
+  offers         Offer[]
+  programEdits   Program[]      @relation("ProgramEditor")
+  campaigns      SmsCampaign[]
+  sessions       Session[]
+  otpChallenges  OtpChallenge[]
+
+  @@index([role, active])
+}
+
+model StaffBranch {
+  staffId  String @db.Uuid
+  branchId String @db.Uuid
+
+  staff  Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@id([staffId, branchId])
+  @@index([branchId])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Cards, stamps and vouchers
+// ---------------------------------------------------------------------------------------------
+
+/// One loyalty card per customer: the counters of the open card. Completed cards live on as vouchers.
+/// Invariant (checked by tests): stamps = lifetimeStamps - sum(Voucher.stampsConsumed of card rewards).
+model Card {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  customerId     String    @unique @db.Uuid
+  /// Stamps on the open card right now: 0 <= stamps < Program.stampsRequired (BR-07).
+  stamps         Int       @default(0)
+  /// Counter visits: one per customer, outlet and day (see Visit).
+  visits         Int       @default(0)
+  lifetimeStamps Int       @default(0)
+  rewardsEarned  Int       @default(0)
+  lastVisitAt    DateTime? @db.Timestamptz(3)
+  /// Bumped on every change so the customer app can poll a cheap version number (NF-04).
+  version        Int       @default(0)
+  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+}
+
+/// The stamp ledger: one row per stamp transaction, never changed or deleted (CA-19).
+model StampEntry {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  customerId     String      @db.Uuid
+  /// Positive for stamps earned, negative for an undo or a downward adjustment. Never 0.
+  count          Int
+  source         StampSource
+  /// The outlet where it happened. Null for head-office actions and for stamps a customer claims in the app.
+  branchId       String?     @db.Uuid
+  /// Who did it. Null for welcome stamps and offer claims made by the customer.
+  staffId        String?     @db.Uuid
+  offerId        String?     @db.Uuid
+  /// Required for adjustments (MG-07).
+  reason         String?
+  /// The entry this one cancels (an undo, BR-04). An entry can be cancelled once.
+  reversesId     String?     @unique @db.Uuid
+  /// The manager or owner who approved going over the daily limit (BR-02).
+  overrideById   String?     @db.Uuid
+  /// Sent by the cashier app so a retried request cannot stamp twice (CA-20).
+  idempotencyKey String?
+  /// Stamps on the open card after this entry.
+  stampsAfter    Int
+  /// How many cards this entry filled, that is how many vouchers it issued (BR-07). An entry that filled one cannot be undone (BR-04).
+  completedCards Int         @default(0)
+  /// When these stamps lapse (BR-06). Fixed from the program at the time of earning (BR-15). Null means never.
+  expiresAt      DateTime?   @db.Timestamptz(3)
+  createdAt      DateTime    @default(now()) @db.Timestamptz(3)
+
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branch     Branch?     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  staff      Staff?      @relation("StampEntryActor", fields: [staffId], references: [id], onDelete: Restrict)
+  overrideBy Staff?      @relation("StampEntryOverride", fields: [overrideById], references: [id], onDelete: Restrict)
+  offer      Offer?      @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  reverses   StampEntry? @relation("Reversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversedBy StampEntry? @relation("Reversal")
+  vouchers   Voucher[]
+
+  @@unique([staffId, idempotencyKey])
+  @@index([customerId, createdAt(sort: Desc)])
+  @@index([branchId, createdAt(sort: Desc)])
+  @@index([staffId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+}
+
+/// A counter visit: a customer who got a stamp or a reward at an outlet on a day (definitions, section 15).
+model Visit {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  customerId String   @db.Uuid
+  branchId   String   @db.Uuid
+  /// The calendar day in Asia/Dhaka.
+  day        DateTime @db.Date
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  branch   Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@unique([customerId, branchId, day])
+  @@index([day])
+  @@index([customerId, day(sort: Desc)])
+}
+
+/// A reward voucher from a full card or a claimed offer. It works once, anywhere, and has no cash value (BR-08).
+/// Title and items are copied at issue time so a later program change does not alter it (BR-14).
+/// Whether it is ready, used or expired is worked out from redeemedAt and expiresAt, never stored.
+model Voucher {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  /// What the customer shows and the cashier types, "CJ-XXXX-XXXX".
+  code           String        @unique
+  customerId     String        @db.Uuid
+  source         VoucherSource
+  offerId        String?       @db.Uuid
+  /// The stamp entry that filled the card (card rewards).
+  triggerEntryId String?       @db.Uuid
+  /// Stamps this card used up when it filled, that is Program.stampsRequired at that moment (card rewards).
+  stampsConsumed Int?
+  titleBn        String
+  titleEn        String
+  sourceBn       String
+  sourceEn       String
+  /// The items the customer chooses from at the counter, [{ "id", "nameBn", "nameEn" }]. Empty when there is no choice (BR-09).
+  choices        Json          @default("[]")
+  issuedAt       DateTime      @default(now()) @db.Timestamptz(3)
+  expiresAt      DateTime      @db.Timestamptz(3)
+  redeemedAt     DateTime?     @db.Timestamptz(3)
+  redeemedById   String?       @db.Uuid
+  redeemedAtId   String?       @db.Uuid
+  chosenItemId   String?
+  chosenItemBn   String?
+  chosenItemEn   String?
+
+  customer       Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  offer          Offer?      @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  triggerEntry   StampEntry? @relation(fields: [triggerEntryId], references: [id], onDelete: Restrict)
+  redeemedBy     Staff?      @relation("VoucherRedeemer", fields: [redeemedById], references: [id], onDelete: Restrict)
+  redeemedBranch Branch?     @relation("VoucherRedeemedAt", fields: [redeemedAtId], references: [id], onDelete: Restrict)
+  claim          OfferClaim?
+
+  @@index([customerId, issuedAt(sort: Desc)])
+  @@index([expiresAt])
+  @@index([redeemedAt])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Offers
+// ---------------------------------------------------------------------------------------------
+
+model Offer {
+  id          String      @id @default(uuid(7)) @db.Uuid
+  kind        OfferKind
+  status      OfferStatus @default(LIVE)
+  badgeBn     String
+  badgeEn     String
+  titleBn     String
+  titleEn     String
+  bodyBn      String
+  bodyEn      String
+  /// Terms of the offer, [{ "bn", "en" }].
+  terms       Json        @default("[]")
+  /// STAMP offers: stamps added when claimed (BR-20).
+  bonusStamps Int?
+  /// VOUCHER offers: the title of the voucher created on a claim, and how many days it stays valid.
+  rewardBn    String?
+  rewardEn    String?
+  voucherDays Int?
+  /// Colours of the offer banner.
+  bg          String
+  fg          String
+  startsAt    DateTime    @default(now()) @db.Timestamptz(3)
+  /// Null for an offer with no end date. After this moment the offer is no longer shown (BR-19).
+  endsAt      DateTime?   @db.Timestamptz(3)
+  createdById String?     @db.Uuid
+  createdAt   DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @db.Timestamptz(3)
+  /// Deleted offers disappear at once but stay in the database for claims and vouchers that point at them.
+  deletedAt   DateTime?   @db.Timestamptz(3)
+
+  createdBy    Staff?        @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  claims       OfferClaim[]
+  stampEntries StampEntry[]
+  vouchers     Voucher[]
+  campaigns    SmsCampaign[]
+
+  @@index([status, deletedAt, endsAt])
+}
+
+/// A customer claiming a claimable offer. Once per customer (BR-20), enforced by the unique key.
+model OfferClaim {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  offerId    String   @db.Uuid
+  customerId String   @db.Uuid
+  voucherId  String?  @unique @db.Uuid
+  claimedAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  offer    Offer    @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  voucher  Voucher? @relation(fields: [voucherId], references: [id], onDelete: Restrict)
+
+  @@unique([offerId, customerId])
+  @@index([customerId])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sign-in
+// ---------------------------------------------------------------------------------------------
+
+/// A one-time code sent to a phone. Only a keyed hash of the code is stored. Single use, short lived,
+/// with a limited number of attempts. Also what the OTP rate limits count (NF-06).
+model OtpChallenge {
+  /// Random (v4) because the client holds it as a handle between "send code" and "verify".
+  id         String     @id @default(uuid(4)) @db.Uuid
+  purpose    OtpPurpose
+  phone      String
+  /// Set for staff sign-in, where the code is the second step after the PIN (MG-21).
+  staffId    String?    @db.Uuid
+  codeHash   String
+  attempts   Int        @default(0)
+  expiresAt  DateTime   @db.Timestamptz(3)
+  consumedAt DateTime?  @db.Timestamptz(3)
+  createdAt  DateTime   @default(now()) @db.Timestamptz(3)
+  ipHash     String?
+
+  staff Staff? @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([phone, createdAt(sort: Desc)])
+  @@index([ipHash, createdAt(sort: Desc)])
+  @@index([expiresAt])
+}
+
+/// A signed-in device. The browser holds a random token, the database holds only its SHA-256, so a leaked
+/// table cannot be replayed and a session can be revoked (MG-21, sign out of all devices).
+/// Exactly one of customerId and staffId is set (a CHECK enforces it).
+model Session {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  tokenHash   String    @unique
+  customerId  String?   @db.Uuid
+  staffId     String?   @db.Uuid
+  /// The outlet a cashier signed in at. Stamps and redemptions are recorded against it.
+  branchId    String?   @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  lastSeenAt  DateTime  @default(now()) @db.Timestamptz(3)
+  /// Hard limit: the session is dead after this whatever happens.
+  expiresAt   DateTime  @db.Timestamptz(3)
+  /// Staff sessions also end after this long without a request (CA-18). Null for customers.
+  idleMinutes Int?
+  revokedAt   DateTime? @db.Timestamptz(3)
+  userAgent   String?
+  ipHash      String?
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  staff    Staff?    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  branch   Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([customerId])
+  @@index([staffId])
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Audit, notifications, SMS
+// ---------------------------------------------------------------------------------------------
+
+/// Who changed what and when, for rules, offers, staff, outlets and manual stamp adjustments (MG-23).
+/// Append-only. Stamp, undo, redemption and override history is in StampEntry and Voucher.
+model AuditLog {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  at         DateTime  @default(now()) @db.Timestamptz(3)
+  actorType  ActorType
+  /// A Staff or Customer id depending on actorType. No foreign key: the log must outlive both.
+  actorId    String?   @db.Uuid
+  /// Dotted name such as "program.update" or "offer.pause".
+  action     String
+  entityType String
+  entityId   String?
+  branchId   String?   @db.Uuid
+  before     Json?
+  after      Json?
+  requestId  String?
+
+  @@index([entityType, entityId, at(sort: Desc)])
+  @@index([actorId, at(sort: Desc)])
+  @@index([at(sort: Desc)])
+}
+
+/// A message in the customer's notification list. Text is built in the app from kind and params, so it follows the language.
+model Notification {
+  id         String           @id @default(uuid(7)) @db.Uuid
+  customerId String           @db.Uuid
+  kind       NotificationKind
+  params     Json             @default("{}")
+  createdAt  DateTime         @default(now()) @db.Timestamptz(3)
+  readAt     DateTime?        @db.Timestamptz(3)
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, createdAt(sort: Desc)])
+}
+
+model SmsCampaign {
+  id          String            @id @default(uuid(7)) @db.Uuid
+  name        String
+  audience    SmsAudience
+  message     String
+  /// True when the message has Bangla (or other non-GSM) characters: 70 per SMS, 67 per part when split (BR-23).
+  unicode     Boolean
+  /// SMS parts one recipient needs.
+  parts       Int
+  recipients  Int               @default(0)
+  status      SmsCampaignStatus @default(DRAFT)
+  scheduledAt DateTime?         @db.Timestamptz(3)
+  sentAt      DateTime?         @db.Timestamptz(3)
+  offerId     String?           @db.Uuid
+  createdById String?           @db.Uuid
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+
+  offer     Offer?       @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  createdBy Staff?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  messages  SmsMessage[]
+
+  @@index([createdAt(sort: Desc)])
+}
+
+model SmsMessage {
+  id                String           @id @default(uuid(7)) @db.Uuid
+  campaignId        String           @db.Uuid
+  customerId        String           @db.Uuid
+  status            SmsMessageStatus @default(QUEUED)
+  providerMessageId String?
+  error             String?
+  sentAt            DateTime?        @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(3)
+
+  campaign SmsCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@unique([campaignId, customerId])
+  @@index([customerId])
+}
+
+/// Small key / value settings that are not part of the loyalty program, such as the SMS balance (BR-24).
+model Setting {
+  key         String   @id
+  value       Json
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  updatedById String?  @db.Uuid
+}

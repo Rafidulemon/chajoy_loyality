@@ -4,8 +4,9 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { ActivityBadge } from '@/components/activity-badge';
-import { IconChip, Segmented } from '@/components/ui';
-import { history, type ActivityType } from '@/lib/data';
+import { Button, IconChip, Segmented } from '@/components/ui';
+import { useHistory } from '@/lib/api/history';
+import type { ActivityType } from '@/lib/data';
 import { useI18n } from '@/lib/i18n';
 import { useWallet } from '@/lib/wallet';
 
@@ -14,12 +15,13 @@ type Filter = 'all' | 'stamp' | 'reward';
 export default function HistoryPage() {
   const { tx, l, n } = useI18n();
   const [filter, setFilter] = useState<Filter>('all');
-  const { activity, lifetime, earned } = useWallet();
-  const items = [...activity, ...history].filter((h) => filter === 'all' || h.type === filter);
+  const { lifetime, earned, visits } = useWallet();
+  const { items: all, loading, hasMore, loadingMore, loadMore } = useHistory(25);
+  const items = all.filter((h) => filter === 'all' || h.type === filter);
   const totals = [
     { label: tx('মোট Stamp', 'Total stamps'), value: lifetime, bg: 'var(--tangerine-soft)' },
     { label: tx('নেওয়া Reward', 'Rewards'), value: earned, bg: 'var(--rose-soft)' },
-    { label: tx('আউটলেটে ভিজিট', 'Outlets visited'), value: 2, bg: 'var(--aqua-soft)' },
+    { label: tx('ভিজিট', 'Visits'), value: visits, bg: 'var(--aqua-soft)' },
   ];
   const style: Record<ActivityType, { chip: string; mark: string }> = {
     stamp: { chip: '#F5D900', mark: '+' },
@@ -57,7 +59,12 @@ export default function HistoryPage() {
         ]}
       />
       <section aria-label={tx('ইতিহাস', 'History')} className="rounded-card border border-line bg-surface px-5 pb-3 pt-2">
-        {items.length === 0 && <p className="py-6 text-center text-muted">{tx('এখনো কিছু নেই', 'Nothing here yet')}</p>}
+        {loading && (
+          <div role="status" aria-label={tx('লোড হচ্ছে', 'Loading')} className="flex flex-col gap-3 py-4">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="h-12 animate-pulse rounded-xl bg-surface2" />)}
+          </div>
+        )}
+        {!loading && items.length === 0 && <p className="py-6 text-center text-muted">{tx('এখনো কিছু নেই', 'Nothing here yet')}</p>}
         {items.map((h, i) => {
           const showGroup = i === 0 || items[i - 1].group.en !== h.group.en;
           return (
@@ -74,6 +81,11 @@ export default function HistoryPage() {
             </div>
           );
         })}
+        {hasMore && (
+          <div className="flex justify-center pt-4">
+            <Button variant="secondary" size="sm" onClick={loadMore} disabled={loadingMore}>{loadingMore ? tx('লোড হচ্ছে…', 'Loading…') : tx('আরও দেখুন', 'Show more')}</Button>
+          </div>
+        )}
       </section>
     </>
   );

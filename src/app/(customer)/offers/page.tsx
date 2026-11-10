@@ -3,8 +3,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Cake, Check, Clock, Gift, IceCreamCone, Lock, Sparkles, Zap, type LucideIcon } from 'lucide-react';
 import { Button, ButtonLink, PageTitle } from '@/components/ui';
+import { errorText } from '@/lib/api/messages';
 import { isClaimable, type Offer, type OfferKind } from '@/lib/data';
-import { useI18n } from '@/lib/i18n';
+import { useI18n, type Text } from '@/lib/i18n';
 import { useWallet } from '@/lib/wallet';
 import { cn } from '@/lib/cn';
 
@@ -17,6 +18,20 @@ function OfferCard({ offer }: { offer: Offer }) {
   const done = claimed.includes(offer.id);
   const ends = offer.endsInDays;
   const urgent = ends !== null && ends <= 2;
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<Text | null>(null);
+
+  const claim = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      await claimOffer(offer);
+    } catch (e) {
+      setProblem(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // The offer bar links here with #<offer id>. The router changes the URL without firing :target, so mark the card from the hash.
   const [highlight, setHighlight] = useState(false);
@@ -39,7 +54,7 @@ function OfferCard({ offer }: { offer: Offer }) {
   } else if (isClaimable(offer)) {
     if (!done)
       cta = (
-        <Button onClick={() => claimOffer(offer)}>
+        <Button onClick={() => void claim()} disabled={busy}>
           {offer.kind === 'stamp' ? tx(`+${n(offer.bonusStamps ?? 1)}টি Stamp নিন`, `Claim +${offer.bonusStamps ?? 1} stamp`) : tx('অফারটি নিন', 'Claim offer')}
         </Button>
       );
@@ -77,6 +92,7 @@ function OfferCard({ offer }: { offer: Offer }) {
           </ul>
         </details>
         <div className="mt-auto pt-1">{cta}</div>
+        {problem && <p role="alert" className="text-[13px] font-semibold text-danger">{l(problem)}</p>}
       </div>
     </article>
   );

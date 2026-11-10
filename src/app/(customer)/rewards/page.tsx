@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { ChevronRight, Gift, Tag } from 'lucide-react';
 import { VoucherTicket } from '@/components/voucher-ticket';
 import { ButtonLink, Card, PageTitle } from '@/components/ui';
-import { useProgram } from '@/lib/store';
+import { useProgram } from '@/lib/api/program';
 import { useI18n } from '@/lib/i18n';
 import { useWallet } from '@/lib/wallet';
 import { cn } from '@/lib/cn';

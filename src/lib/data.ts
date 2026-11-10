@@ -1,6 +1,7 @@
 /**
- * Sample data for the prototype. Replace with API calls once the backend exists.
- * Every user-facing string is a { bn, en } pair.
+ * What the three apps share about ChaJoy: the UI types the API adapters produce, ChaJoy's starting card, and the outlet and
+ * offer reference data the seed script loads into an empty database (prisma/seed.ts). Nothing here is customer data: every
+ * customer, card, voucher and activity comes from the API. Every user-facing string is a { bn, en } pair.
  */
 import type { Text } from './i18n';
 
@@ -38,9 +39,6 @@ export const shop: Shop = {
   color: '#97C334', fg: '#171717', dark: false, stampBg: '#171717', stampFg: '#F5D900', dash: 'rgba(23,23,23,0.5)', deco1: 'rgba(245,217,0,0.9)', deco2: 'rgba(255,93,115,0.85)',
 };
 
-/** The reward a full card unlocks, written as a title (the `reward` field above is for mid-sentence use). */
-export const rewardTitle: Text = t('ফ্রি বাবল টি / আইসক্রিম', 'Free bubble tea or scoop');
-
 export type Branch = {
   id: string;
   name: Text;
@@ -68,97 +66,11 @@ export const branches: Branch[] = [
   { id: 'laxmibazar', name: t('লক্ষ্মীবাজার', 'Laxmibazar'), address: t('পুরান ঢাকা, লক্ষ্মীবাজার', 'Old Dhaka, Laxmibazar'), lat: 23.7108, lng: 90.4098, staff: 0, customers: 12, main: false, chip: '#F5D900' },
 ];
 
-/** Placeholder opening hours (minutes after midnight) shared by every outlet until real hours are set. */
-export const OUTLET_HOURS = { open: 11 * 60, close: 23 * 60 };
-
 export type ActivityType = 'stamp' | 'reward' | 'join';
 export type HistoryItem = { group: Text; type: ActivityType; detail: Text; time: Text; count?: number };
 
-export const history: HistoryItem[] = [
-  { group: t('আজ', 'Today'), type: 'stamp', detail: t('বাবল টি', 'Bubble tea'), time: t('৪:১০ PM', '4:10 PM'), count: 1 },
-  { group: t('অক্টোবর', 'October'), type: 'stamp', detail: t('মিল্কশেক ×২', 'Milkshake ×2'), time: t('২৮ অক্টোবর', 'Oct 28'), count: 2 },
-  { group: t('অক্টোবর', 'October'), type: 'reward', detail: t('ফ্রি স্কুপ আইসক্রিম', 'Free ice cream scoop'), time: t('২০ অক্টোবর', 'Oct 20') },
-  { group: t('অক্টোবর', 'October'), type: 'stamp', detail: t('সানডে', 'Sundae'), time: t('১৬ অক্টোবর', 'Oct 16'), count: 1 },
-];
-
-export const notifications: { color: string; mark: string; title: Text; body: Text; time: Text; unread: boolean }[] = [
-  { color: '#F5D900', mark: '★', title: t('আর ৩টি Stamp বাকি!', 'Just 3 more stamps!'), body: t('আর ৩টি Stamp পেলেই ফ্রি বাবল টি বা আইসক্রিম।', '3 more stamps and your bubble tea or ice cream is free.'), time: t('১ ঘণ্টা আগে', '1h ago'), unread: true },
-  { color: '#FF8A9A', mark: '2×', title: t('শুক্রবার ডাবল Stamp', 'Double stamps on Friday'), body: t('এই শুক্রবার চা জয়-এর প্রতি কেনাকাটায় ২টি Stamp পাবেন।', 'Get 2 stamps for every ChaJoy purchase this Friday.'), time: t('৫ ঘণ্টা আগে', '5h ago'), unread: true },
-  { color: '#7FCBFF', mark: '!', title: t('Stamp-এর মেয়াদ শেষ হচ্ছে', 'Stamps expiring soon'), body: t('২টি Stamp ৭ দিনের মধ্যে মেয়াদ শেষ হবে।', '2 of your stamps expire in 7 days.'), time: t('গতকাল', 'Yesterday'), unread: true },
-  { color: '#8FE3D8', mark: '✓', title: t('Reward নেওয়া হয়েছে', 'Reward redeemed'), body: t('ফ্রি স্কুপ আইসক্রিম নিয়েছেন। মজা করে খান!', 'You got a free ice cream scoop. Enjoy!'), time: t('২০ অক্টোবর', 'Oct 20'), unread: false },
-  { color: '#7FD8CE', mark: '↻', title: t('chaJoy loyality-তে স্বাগতম', 'Welcome to chaJoy loyality'), body: t('যেকোনো আউটলেটে QR দেখিয়ে Stamp জমানো শুরু করুন।', 'Show your QR at any ChaJoy branch to start collecting stamps.'), time: t('২৮ অক্টোবর', 'Oct 28'), unread: false },
-];
-
 export type CustomerStatus = 'active' | 'ready' | 'inactive';
 export type Customer = { id: string; initial: Text; name: Text; phone: string; stamps: number; visits: number; last: Text; status: CustomerStatus; avatar: string };
-
-export const customers: Customer[] = [
-  { id: 'tanvir', initial: t('তা', 'T'), name: t('তানভীর আহমেদ', 'Tanvir Ahmed'), phone: '+880 17XX-XXX123', stamps: 7, visits: 23, last: t('২ দিন আগে', '2 days ago'), status: 'active', avatar: '#F5D900' },
-  { id: 'nusrat', initial: t('নু', 'N'), name: t('নুসরাত জাহান', 'Nusrat Jahan'), phone: '+880 18XX-XXX456', stamps: 10, visits: 19, last: t('আজ', 'Today'), status: 'ready', avatar: '#FF8A9A' },
-  { id: 'sakib', initial: t('সা', 'S'), name: t('সাকিব হাসান', 'Sakib Hasan'), phone: '+880 19XX-XXX789', stamps: 1, visits: 1, last: t('আজ', 'Today'), status: 'active', avatar: '#8FE3D8' },
-  { id: 'farhana', initial: t('ফা', 'F'), name: t('ফারহানা ইসলাম', 'Farhana Islam'), phone: '+880 16XX-XXX234', stamps: 4, visits: 17, last: t('৫ দিন আগে', '5 days ago'), status: 'active', avatar: '#7FD8CE' },
-  { id: 'rashed', initial: t('রা', 'R'), name: t('রাশেদ করিম', 'Rashed Karim'), phone: '+880 15XX-XXX567', stamps: 10, visits: 12, last: t('গতকাল', 'Yesterday'), status: 'ready', avatar: '#7FCBFF' },
-  { id: 'mehedi', initial: t('মে', 'M'), name: t('মেহেদী হাসান', 'Mehedi Hasan'), phone: '+880 17XX-XXX890', stamps: 3, visits: 6, last: t('৪১ দিন আগে', '41 days ago'), status: 'inactive', avatar: '#FF8FB1' },
-  { id: 'tasnim', initial: t('তা', 'T'), name: t('তাসনিম রহমান', 'Tasnim Rahman'), phone: '+880 18XX-XXX321', stamps: 6, visits: 9, last: t('৩ দিন আগে', '3 days ago'), status: 'active', avatar: '#F5D900' },
-  { id: 'arif', initial: t('আ', 'A'), name: t('আরিফ চৌধুরী', 'Arif Chowdhury'), phone: '+880 19XX-XXX654', stamps: 2, visits: 4, last: t('৫২ দিন আগে', '52 days ago'), status: 'inactive', avatar: '#8FE3D8' },
-];
-
-export const getCustomer = (id: string) => customers.find((c) => c.id === id);
-
-export const customerCounts = { all: 312, active: 267, ready: 18, inactive: 45 };
-
-export const timeline = [
-  { color: '#F5D900', mark: '+', what: t('+১ Stamp · বাবল টি', '+1 stamp · Bubble tea'), meta: t('রাকিব · মিরপুর ১০', 'Rakib · Mirpur 10'), when: t('২ দিন আগে', '2 days ago') },
-  { color: '#F5D900', mark: '+', what: t('+১ Stamp · সানডে', '+1 stamp · Sundae'), meta: t('মিতু · মিরপুর ১০', 'Mitu · Mirpur 10'), when: t('৬ দিন আগে', '6 days ago') },
-  { color: '#7FCBFF', mark: '✉', what: t('অফার SMS পেয়েছেন', 'Received offer SMS'), meta: t('শুক্রবার ডাবল Stamp', 'Double stamp Friday'), when: t('৮ নভেম্বর', 'Nov 8') },
-  { color: '#F5D900', mark: '+', what: t('+২ Stamp · মিল্কশেক', '+2 stamps · Milkshake'), meta: t('রাকিব · মিরপুর ১০', 'Rakib · Mirpur 10'), when: t('২৮ অক্টোবর', 'Oct 28') },
-  { color: '#FF8A9A', mark: '★', what: t('Reward: ফ্রি আইসক্রিম স্কুপ', 'Reward: free ice cream scoop'), meta: t('রাকিব · মিরপুর ১০', 'Rakib · Mirpur 10'), when: t('২০ অক্টোবর', 'Oct 20') },
-  { color: '#8FE3D8', mark: '✓', what: t('কার্ডে যোগ দিয়েছেন', 'Joined the card'), meta: t('কাউন্টার QR স্ক্যান', 'Counter QR scan'), when: t('১২ মে', 'May 12') },
-];
-
-export const weeklyVisits = [
-  { day: t('শনি', 'Sat'), value: 38 }, { day: t('রবি', 'Sun'), value: 45 }, { day: t('সোম', 'Mon'), value: 41 },
-  { day: t('মঙ্গল', 'Tue'), value: 52 }, { day: t('বুধ', 'Wed'), value: 48 }, { day: t('বৃহঃ', 'Thu'), value: 61 }, { day: t('শুক্র', 'Fri'), value: 70 },
-];
-
-export const popularItems = [
-  { name: t('বাবল টি', 'Bubble tea'), stamps: 486, color: 'var(--brand)' },
-  { name: t('স্কুপ আইসক্রিম', 'Scoop ice cream'), stamps: 352, color: '#F5D900' },
-  { name: t('সানডে', 'Sundae'), stamps: 241, color: '#FF5D73' },
-  { name: t('মিল্কশেক', 'Milkshake'), stamps: 169, color: '#2EC4B6' },
-];
-
-export const recentActivity = [
-  { customerId: 'tanvir', type: 'stamp' as ActivityType, action: t('+১ Stamp · বাবল টি', '+1 stamp · Bubble tea'), staff: t('রাকিব', 'Rakib'), time: t('৪:১০ PM', '4:10 PM') },
-  { customerId: 'nusrat', type: 'reward' as ActivityType, action: t('Reward · আইসক্রিম', 'Reward · Ice cream'), staff: t('রাকিব', 'Rakib'), time: t('৩:৪৫ PM', '3:45 PM') },
-  { customerId: 'sakib', type: 'join' as ActivityType, action: t('নতুন গ্রাহক', 'New customer'), staff: t('মিতু', 'Mitu'), time: t('২:২০ PM', '2:20 PM') },
-  { customerId: 'farhana', type: 'stamp' as ActivityType, action: t('+২ Stamp · মিল্কশেক', '+2 stamps · Milkshake'), staff: t('মিতু', 'Mitu'), time: t('১:০৫ PM', '1:05 PM') },
-  { customerId: 'rashed', type: 'stamp' as ActivityType, action: t('+১ Stamp · সানডে', '+1 stamp · Sundae'), staff: t('রাকিব', 'Rakib'), time: t('১২:৩০ PM', '12:30 PM') },
-];
-
-export type Role = 'owner' | 'manager' | 'cashier';
-export type Staff = { id: string; initial: Text; name: Text; role: Role; branch: Text; today: number | null; seen: Text; active: boolean; avatar: string };
-
-export const staffMembers: Staff[] = [
-  { id: 'rafiq', initial: t('র', 'R'), name: t('রফিক', 'Rafiq'), role: 'owner', branch: t('সব আউটলেট', 'All outlets'), today: null, seen: t('এখন অনলাইন', 'Online now'), active: true, avatar: '#7FD8CE' },
-  { id: 'rakib', initial: t('রা', 'R'), name: t('রাকিব', 'Rakib'), role: 'cashier', branch: t('মিরপুর ১০', 'Mirpur 10'), today: 24, seen: t('এখন অনলাইন', 'Online now'), active: true, avatar: '#F5D900' },
-  { id: 'mitu', initial: t('মি', 'M'), name: t('মিতু', 'Mitu'), role: 'cashier', branch: t('মিরপুর ১০', 'Mirpur 10'), today: 11, seen: t('২০ মিনিট আগে', '20 min ago'), active: true, avatar: '#FF8A9A' },
-  { id: 'sohel', initial: t('সো', 'S'), name: t('সোহেল', 'Sohel'), role: 'manager', branch: t('মোহাম্মদপুর', 'Mohammadpur'), today: 8, seen: t('১ ঘণ্টা আগে', '1 hour ago'), active: true, avatar: '#8FE3D8' },
-  { id: 'jui', initial: t('জু', 'J'), name: t('জুই', 'Jui'), role: 'cashier', branch: t('রামপুরা', 'Rampura'), today: 0, seen: t('৩ দিন আগে', '3 days ago'), active: false, avatar: '#7FCBFF' },
-];
-
-/** The sample numbers the cashier's day starts from. Live activity in the store is added on top. */
-export const todayBaseline = { stamps: 24, rewards: 3, newCustomers: 5, cancelled: 0 };
-
-/** The cashier signed in on the counter device, and the outlet that counter belongs to. */
-export const onDutyCashier = staffMembers.find((m) => m.id === 'rakib') ?? staffMembers[0];
-export const counterOutlet = branches.find((b) => b.main) ?? branches[0];
-
-export const campaigns = [
-  { name: t('শুক্রবার ডাবল Stamp', 'Double stamp Friday'), meta: t('৮ নভেম্বর · ৩১২ জন', 'Nov 8 · 312 people'), result: t('৪১ জন এসেছেন', '41 came back') },
-  { name: t('আমরা আপনাকে মিস করছি', 'We miss you'), meta: t('২৫ অক্টোবর · ৫২ জন', 'Oct 25 · 52 people'), result: t('৯ জন এসেছেন', '9 came back') },
-  { name: t('নতুন ম্যাচা ফ্লেভার', 'New matcha flavour'), meta: t('১০ অক্টোবর · ২৮৮ জন', 'Oct 10 · 288 people'), result: t('৩৩ জন এসেছেন', '33 came back') },
-];
 
 export type VoucherStatus = 'ready' | 'used' | 'expired';
 export type Voucher = {
@@ -174,15 +86,9 @@ export type Voucher = {
   usedOn?: Text;
   /** Items the customer picks from at the counter. */
   choices?: Text[];
+  /** The ids of those items, in the same order: this is what is sent to the server when the cashier picks one. */
+  choiceIds?: string[];
 };
-
-/** Reward vouchers issued when a card fills or an offer is claimed. */
-export const vouchers: Voucher[] = [
-  { id: 'v-card', code: 'CJ-4F7K-92', title: rewardTitle, source: t('কার্ড সম্পূর্ণ', 'Card completed'), earned: t('২ নভেম্বর', '2 Nov'), expires: t('২ ডিসেম্বর', '2 Dec'), daysLeft: 24, status: 'ready', choices: shop.rewardItems },
-  { id: 'v-topping', code: 'CJ-9M3Q-17', title: t('ফ্রি টপিং', 'Free topping'), source: t('অফার: ফ্রি টপিং', 'Offer: Free topping'), earned: t('৩ নভেম্বর', '3 Nov'), expires: t('১০ নভেম্বর', '10 Nov'), daysLeft: 2, status: 'ready' },
-  { id: 'v-scoop', code: 'CJ-2B8D-55', title: t('ফ্রি স্কুপ আইসক্রিম', 'Free ice cream scoop'), source: t('কার্ড সম্পূর্ণ', 'Card completed'), earned: t('২০ অক্টোবর', '20 Oct'), expires: t('১৯ নভেম্বর', '19 Nov'), daysLeft: 0, status: 'used', usedOn: t('২০ অক্টোবর', '20 Oct') },
-  { id: 'v-sundae', code: 'CJ-6T1H-08', title: t('ফ্রি সানডে', 'Free sundae'), source: t('কার্ড সম্পূর্ণ', 'Card completed'), earned: t('১ সেপ্টেম্বর', '1 Sep'), expires: t('১ অক্টোবর', '1 Oct'), daysLeft: 0, status: 'expired' },
-];
 
 export type OfferKind = 'double' | 'stamp' | 'voucher' | 'info' | 'birthday';
 export type Offer = {

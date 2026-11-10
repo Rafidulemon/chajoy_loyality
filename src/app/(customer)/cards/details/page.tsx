@@ -5,10 +5,11 @@ import { ArrowLeft, ChevronRight, CupSoda, MapPin, QrCode } from 'lucide-react';
 import { LoyaltyCard } from '@/components/loyalty-card';
 import { ActivityBadge } from '@/components/activity-badge';
 import { ButtonLink, Card, CardTitle } from '@/components/ui';
-import { branches, history } from '@/lib/data';
+import { useBranches } from '@/lib/api/branches';
+import { useHistory } from '@/lib/api/history';
+import { useProgram } from '@/lib/api/program';
 import { useI18n } from '@/lib/i18n';
-import { useProgram } from '@/lib/store';
-import { useCardView, useWallet } from '@/lib/wallet';
+import { useCardView, useMemberQr, useWallet } from '@/lib/wallet';
 
 const TILE = [
   { bg: 'var(--sky-soft)', chip: '#7FCBFF' },
@@ -18,9 +19,12 @@ const TILE = [
 
 export default function CardDetailPage() {
   const { tx, l, n } = useI18n();
-  const { activity } = useWallet();
+  const { me, memberCode } = useWallet();
   const { collected, fresh } = useCardView();
   const shop = useProgram();
+  const qr = useMemberQr();
+  const { branches } = useBranches();
+  const { items: cardHistory, loading: historyLoading } = useHistory(8);
   const { program } = shop;
 
   const rules = [
@@ -30,7 +34,6 @@ export default function CardDetailPage() {
     [tx('Stamp-এর মেয়াদ', 'Stamps expire'), program.expiryDays === 0 ? tx('কখনো না', 'Never') : tx(`${n(program.expiryDays)} দিন`, `After ${program.expiryDays} days`)],
     [tx('কোথায় চলবে', 'Valid at'), tx('সব আউটলেটে', 'All outlets')],
   ];
-  const cardHistory = [...activity, ...history];
 
   return (
     <>
@@ -40,7 +43,7 @@ export default function CardDetailPage() {
       </Link>
       <div className="flex flex-wrap items-start gap-[18px]">
         <div className="flex min-w-0 flex-[3_1_340px] flex-col gap-[18px]">
-          <LoyaltyCard shop={shop} collected={collected} fresh={fresh} memberName={tx('তানভীর আহমেদ', 'Tanvir Ahmed')} memberId="A7K-2931" />
+          <LoyaltyCard shop={shop} collected={collected} fresh={fresh} memberName={me?.name ?? undefined} memberId={memberCode} qrValue={qr} />
           <Card>
             <CardTitle>{tx('Reward অপশন', 'Reward options')}</CardTitle>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
@@ -75,14 +78,18 @@ export default function CardDetailPage() {
           <Link href="/outlets" className="flex items-center gap-3 rounded-card border border-line bg-surface p-4 hover:bg-surface2">
             <span className="flex size-11 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft text-brand-ink"><MapPin size={22} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
-              <span className="block font-bold">{tx(`${n(branches.length)}টি আউটলেটেই চলবে`, `Valid at all ${branches.length} outlets`)}</span>
+              <span className="block font-bold">{branches.length ? tx(`${n(branches.length)}টি আউটলেটেই চলবে`, `Valid at all ${branches.length} outlets`) : tx('সব আউটলেটে চলবে', 'Valid at all outlets')}</span>
               <span className="block text-sm text-muted">{tx('ঠিকানা ও দিকনির্দেশ দেখুন', 'See addresses and directions')}</span>
             </span>
             <ChevronRight size={20} className="text-muted" aria-hidden="true" />
           </Link>
           <Card>
             <CardTitle action={<Link href="/history" className="text-sm font-bold">{tx('সব দেখুন', 'See all')}</Link>}>{tx('এই কার্ডের ইতিহাস', 'This card’s history')}</CardTitle>
-            {cardHistory.length === 0 ? (
+            {historyLoading ? (
+              <div role="status" aria-label={tx('লোড হচ্ছে', 'Loading')} className="flex flex-col gap-2 py-1">
+                {[0, 1, 2].map((i) => <div key={i} className="h-11 animate-pulse rounded-xl bg-surface2" />)}
+              </div>
+            ) : cardHistory.length === 0 ? (
               <p className="text-sm text-muted">{tx('প্রথম Stamp নিতে যেকোনো আউটলেটে QR দেখান।', 'Show your QR at any ChaJoy outlet to get your first stamp.')}</p>
             ) : (
               <ul>
